@@ -7,26 +7,17 @@ from groq import Groq
 from ddgs import DDGS
 from .models import ChatMessage
 
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "dummy_build_key")
-client = Groq(api_key=GROQ_API_KEY)
-
 def chat_view(request):
     history = ChatMessage.objects.all().order_by('created_at')
     return render(request, 'chat/index.html', {'history': history})
 
 def get_live_search_context(query):
     try:
-        # DDGS context manager का उपयोग
         with DDGS() as ddgs:
             results = list(ddgs.text(query, max_results=3))
-        
         if results:
             snippets = [f"- {r.get('title', '')}: {r.get('body', '')}" for r in results]
-            context = "\n".join(snippets)
-            print("\n=== LIVE SEARCH SUCCESS ===")
-            print(context[:250] + "...")
-            print("===========================\n")
-            return context
+            return "\n".join(snippets)
     except Exception as e:
         print("Search error:", e)
     return ""
@@ -41,17 +32,22 @@ def ask_bot(request):
             if not user_prompt:
                 return JsonResponse({"error": "Empty message"}, status=400)
 
-            # 1. सर्च चलाएं
+            # API Key को सीधे रनटाइम पर पढ़ें
+            api_key = os.environ.get("GROQ_API_KEY", "").strip()
+            if not api_key:
+                return JsonResponse({"error": "GROQ_API_KEY environment variable is missing on server."}, status=500)
+
+            client = Groq(api_key=api_key)
+
+            # 1. वेब सर्च
             search_context = get_live_search_context(user_prompt)
 
-            # 2. सिस्टम निर्देश
             system_instruction = (
                 "You are an accurate, real-time AI assistant. "
-                "Base your answer strictly on the provided Web Search Results. "
-                "Current year is 2026. Do not mention cutoff dates."
+                "Base your answer strictly on the provided Web Search Results if available. "
+                "The current year is 2026."
             )
 
-            # 3. प्रॉम्प्ट तैयार करें
             if search_context:
                 full_prompt = f"Web Search Results:\n{search_context}\n\nQuestion: {user_prompt}\nAnswer directly:"
             else:
@@ -62,7 +58,6 @@ def ask_bot(request):
                 {"role": "user", "content": full_prompt}
             ]
 
-            # 4. Groq API कॉल
             chat_completion = client.chat.completions.create(
                 messages=messages,
                 model="openai/gpt-oss-120b",
