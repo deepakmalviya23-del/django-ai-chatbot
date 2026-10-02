@@ -7,7 +7,7 @@ from groq import Groq
 from ddgs import DDGS
 from .models import ChatMessage
 
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "dummy_build_key")
 client = Groq(api_key=GROQ_API_KEY)
 
 def chat_view(request):
