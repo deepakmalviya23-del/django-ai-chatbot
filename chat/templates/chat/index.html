@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Django AI Chatbot</title>
+    <!-- Markdown Parser -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f0f2f5; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .chat-container { width: 650px; height: 85vh; background: #fff; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.08); display: flex; flex-direction: column; overflow: hidden; }
+        .chat-header { padding: 16px 20px; background: #007bff; color: white; font-weight: 600; font-size: 16px; }
+        .chat-box { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; background: #fafafa; }
+        .message { padding: 12px 16px; border-radius: 12px; max-width: 80%; font-size: 14px; line-height: 1.5; word-wrap: break-word; }
+        .user-msg { background: #007bff; color: #fff; align-self: flex-end; border-bottom-right-radius: 2px; }
+        .bot-msg { background: #fff; color: #222; align-self: flex-start; border-bottom-left-radius: 2px; box-shadow: 0 2px 6px rgba(0,0,0,0.05); }
+        .bot-msg p { margin: 0 0 8px 0; }
+        .bot-msg p:last-child { margin-bottom: 0; }
+        .bot-msg pre { background: #282c34; color: #abb2bf; padding: 10px; border-radius: 6px; overflow-x: auto; }
+        .bot-msg code { font-family: Consolas, monospace; }
+        .typing { font-style: italic; color: #888; align-self: flex-start; font-size: 13px; display: none; }
+        .input-area { display: flex; padding: 14px; background: #fff; border-top: 1px solid #eee; gap: 10px; }
+        .input-area input { flex: 1; padding: 12px 14px; border: 1px solid #ccc; border-radius: 6px; outline: none; font-size: 14px; }
+        .input-area button { padding: 0 20px; background: #007bff; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; }
+        .input-area button:disabled { background: #99c2ff; cursor: not-allowed; }
+    </style>
+</head>
+<body>
+
+<div class="chat-container">
+    <div class="chat-header">Deepak M AI Assistant</div>
+    <div class="chat-box" id="chatBox">
+        {% for chat in history %}
+            <div class="message user-msg">{{ chat.user_message }}</div>
+            <div class="message bot-msg" data-raw="{{ chat.bot_response }}"></div>
+        {% endfor %}
+        <div class="typing" id="typingIndicator">Gemini is typing...</div>
+    </div>
+    <div class="input-area">
+        <input type="text" id="userInput" placeholder="Ask a question..." onkeydown="if(event.key === 'Enter') sendMessage()">
+        <button id="sendBtn" onclick="sendMessage()">Send</button>
+    </div>
+</div>
+
+<script>
+// पुरानी चैट को मार्कडाउन में रेंडर करना
+document.querySelectorAll('.bot-msg[data-raw]').forEach(el => {
+    el.innerHTML = marked.parse(el.getAttribute('data-raw'));
+});
+
+async function sendMessage() {
+    const input = document.getElementById("userInput");
+    const sendBtn = document.getElementById("sendBtn");
+    const chatBox = document.getElementById("chatBox");
+    const typing = document.getElementById("typingIndicator");
+    const message = input.value.trim();
+
+    if (!message) return;
+
+    // यूजर मैसेज स्क्रीन पर दिखाएं
+    chatBox.insertBefore(createMsgElement(message, 'user-msg'), typing);
+    input.value = "";
+    input.disabled = true;
+    sendBtn.disabled = true;
+    
+    // टाइपिंग इंडिकेटर दिखाएं
+    typing.style.display = 'block';
+    chatBox.scrollTop = chatBox.scrollHeight;
+
+    try {
+        const response = await fetch('/api/ask/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: message })
+        });
+
+        const data = await response.json();
+        typing.style.display = 'none';
+
+        if (data.reply) {
+            const botDiv = document.createElement("div");
+            botDiv.className = "message bot-msg";
+            botDiv.innerHTML = marked.parse(data.reply);
+            chatBox.insertBefore(botDiv, typing);
+        } else {
+            const errDiv = document.createElement("div");
+            errDiv.className = "message bot-msg";
+            errDiv.style.color = "red";
+            errDiv.innerText = "Error: " + (data.error || "Server issue");
+            chatBox.insertBefore(errDiv, typing);
+        }
+    } catch (err) {
+        typing.style.display = 'none';
+        alert("Network Error!");
+    } finally {
+        input.disabled = false;
+        sendBtn.disabled = false;
+        input.focus();
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+}
+
+function createMsgElement(text, className) {
+    const div = document.createElement("div");
+    div.className = `message ${className}`;
+    div.innerText = text;
+    return div;
+}
+</script>
+</body>
+</html>
